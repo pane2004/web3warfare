@@ -1,13 +1,14 @@
 #define IR_SEND_PIN 23
 #include <IRremote.hpp>
+#include <WiFi.h>
 
 // CONFIG: MODIFY VALUES TO FIT PLAY STYLE
-const int maxHealth = 10; // maximum health points
-const int maxAmmo = 5; // maximum ammunition count (max is 9)
-const int shootCooldown = 500; // interval between each shot (in ms)
-const int reloadTime = 1600; // time it takes to reload the gun (in ms)
-const int resetTime = 500; // time the reset button has to be pressed to reset (in ms)
-const int hitIndicatorTime = 200; // time the hit indicator LED turns off when getting shot at (in ms)
+const int maxHealth = 10;          // maximum health points
+const int maxAmmo = 5;             // maximum ammunition count (max is 9)
+const int shootCooldown = 500;     // interval between each shot (in ms)
+const int reloadTime = 1600;       // time it takes to reload the gun (in ms)
+const int resetTime = 500;         // time the reset button has to be pressed to reset (in ms)
+const int hitIndicatorTime = 200;  // time the hit indicator LED turns off when getting shot at (in ms)
 
 // pins
 byte triggerPin = 4;
@@ -21,33 +22,33 @@ byte irPin = 23;
 byte redPin = 2;
 byte bluePin = 15;
 
-byte pinsSegments[7] = {25, 33, 21, 22, 14, 32, 19};
+byte pinsSegments[7] = { 25, 33, 21, 22, 14, 32, 19 };
 
 // IR communication
-const unsigned long irSendHex = 0xFFA25D; // define hex value to send
+const unsigned long irSendHex = 0xFFA25D;  // define hex value to send
 
 // arrays of digits for 7 segment display
 bool digits[10][7] = {
-  {1, 1, 1, 1, 1, 1, 0},
-  {0, 1, 1, 0, 0, 0, 0},
-  {1, 1, 0, 1, 1, 0, 1},
-  {1, 1, 1, 1, 0, 0, 1},
-  {0, 1, 1, 0, 0, 1, 1},
-  {1, 0, 1, 1, 0, 1, 1},
-  {1, 0, 1, 1, 1, 1, 1},
-  {1, 1, 1, 0, 0, 0, 0},
-  {1, 1, 1, 1, 1, 1, 1},
-  {1, 1, 1, 1, 0, 1, 1}
+  { 1, 1, 1, 1, 1, 1, 0 },
+  { 0, 1, 1, 0, 0, 0, 0 },
+  { 1, 1, 0, 1, 1, 0, 1 },
+  { 1, 1, 1, 1, 0, 0, 1 },
+  { 0, 1, 1, 0, 0, 1, 1 },
+  { 1, 0, 1, 1, 0, 1, 1 },
+  { 1, 0, 1, 1, 1, 1, 1 },
+  { 1, 1, 1, 0, 0, 0, 0 },
+  { 1, 1, 1, 1, 1, 1, 1 },
+  { 1, 1, 1, 1, 0, 1, 1 }
 };
 
 // reload animation on 7 segment display
 bool reloadAnimation[6][7] = {
-  {0, 1, 1, 1, 1, 1, 1},
-  {1, 0, 1, 1, 1, 1, 1},
-  {1, 1, 0, 1, 1, 1, 1},
-  {1, 1, 1, 0, 1, 1, 1},
-  {1, 1, 1, 1, 0, 1, 1},
-  {1, 1, 1, 1, 1, 0, 1}
+  { 0, 1, 1, 1, 1, 1, 1 },
+  { 1, 0, 1, 1, 1, 1, 1 },
+  { 1, 1, 0, 1, 1, 1, 1 },
+  { 1, 1, 1, 0, 1, 1, 1 },
+  { 1, 1, 1, 1, 0, 1, 1 },
+  { 1, 1, 1, 1, 1, 0, 1 }
 };
 const int animationLength = 6;
 const int animationInterval = 100;
@@ -68,7 +69,7 @@ const byte healthColors[11][3] = {
 };
 
 // melody to play when being hit
-const int hitMelody[2] =  {
+const int hitMelody[2] = {
   500,
   600
 };
@@ -84,8 +85,8 @@ const int shootSoundInterval = 1;
 int health = maxHealth;
 int ammoCount = maxAmmo;
 bool alive = true;
-unsigned long lastShot = shootCooldown*-1;
-unsigned long startedReload = reloadTime*-1;
+unsigned long lastShot = shootCooldown * -1;
+unsigned long startedReload = reloadTime * -1;
 bool reloading = false;
 unsigned long startedResetting = 0;
 bool resetting = false;
@@ -98,19 +99,22 @@ int currentFrameIdx = 0;
 unsigned long millisStartedHit = 0;
 bool hitIndicator = false;
 
+// use hotspot to run a 2.4ghz connection, ethglobal wifi is 5ghz
+const char *ssid = "Alex the iPhone 2.0";
+const char *password = "ethglobalsf";
+
 // reset function
-void(* reset) (void) = 0;
+void (*reset)(void) = 0;
 
 // function to display digits on the 7 segment display
 void displaySegments(bool segments[7]) {
-  for(byte seg=0; seg<7; seg+=1) {
+  for (byte seg = 0; seg < 7; seg += 1) {
     digitalWrite(pinsSegments[seg], segments[seg]);
   }
 }
 
 // function to display health on the rgb led
-void displayHealth(int hp)
-{ 
+void displayHealth(int hp) {
   analogWrite(redPin, healthColors[hp][0]);
   analogWrite(greenPin, healthColors[hp][1]);
   analogWrite(bluePin, healthColors[hp][2]);
@@ -118,8 +122,8 @@ void displayHealth(int hp)
 
 void playGameOverSound() {
   int gameOverTones[] = { 622, 587, 554, 523 };
-  for(int i=0; i<4; i++) { 
-    if(i < 3) {
+  for (int i = 0; i < 4; i++) {
+    if (i < 3) {
       tone(buzzerPin, gameOverTones[i]);
       delay(300);
       noTone(buzzerPin);
@@ -136,8 +140,28 @@ void playGameOverSound() {
   }
 }
 
-void setup()
+String get_wifi_status(int status)
 {
+  switch (status)
+  {
+  case WL_IDLE_STATUS:
+    return "WL_IDLE_STATUS";
+  case WL_SCAN_COMPLETED:
+    return "WL_SCAN_COMPLETED";
+  case WL_NO_SSID_AVAIL:
+    return "WL_NO_SSID_AVAIL";
+  case WL_CONNECT_FAILED:
+    return "WL_CONNECT_FAILED";
+  case WL_CONNECTION_LOST:
+    return "WL_CONNECTION_LOST";
+  case WL_CONNECTED:
+    return "WL_CONNECTED";
+  case WL_DISCONNECTED:
+    return "WL_DISCONNECTED";
+  }
+}
+
+void setup() {
   // setup pins
   pinMode(triggerPin, INPUT_PULLUP);
   pinMode(reloadPin, INPUT_PULLUP);
@@ -148,7 +172,7 @@ void setup()
   pinMode(greenPin, OUTPUT);
   pinMode(bluePin, OUTPUT);
   pinMode(buzzerPin, OUTPUT);
-  for(byte i=0; i<7; i+=1) {
+  for (byte i = 0; i < 7; i += 1) {
     pinMode(pinsSegments[i], OUTPUT);
   }
 
@@ -157,47 +181,62 @@ void setup()
   IrSender.begin();
 
   // GAME SETUP
-  displaySegments(digits[ammoCount]); // display ammo count
-  displayHealth(health); // display health
-  digitalWrite(hitLedPin, HIGH); // turn on hit indicator LED
-  
+  displaySegments(digits[ammoCount]);  // display ammo count
+  displayHealth(health);               // display health
+  digitalWrite(hitLedPin, HIGH);       // turn on hit indicator LED
+
   // play startup sound effect
   int startTones[] = { 196, 262, 330, 392 };
-  for(int i=0; i<4; i++)
-  {
+  for (int i = 0; i < 4; i++) {
     tone(buzzerPin, startTones[i]);
     delay(200);
   }
   noTone(buzzerPin);
+
+  // wifi connection
+  Serial.begin(115200);
+  delay(1000);
+  int status = WL_IDLE_STATUS;
+  Serial.println("\nConnecting");
+  Serial.println(get_wifi_status(status));
+  WiFi.begin(ssid, password);
+  while (status != WL_CONNECTED) {
+    delay(500);
+    status = WiFi.status();
+    Serial.println(get_wifi_status(status));
+  }
+
+  Serial.println("\nConnected to the WiFi network");
+  Serial.print("Local ESP32 IP: ");
+  Serial.println(WiFi.localIP());
 }
 
-void loop()
-{
+void loop() {
   unsigned long currentMillis = millis();
-  alive = health>0;
-  
+  alive = health > 0;
+
   // display ammo count
-  if(!reloading) {
+  if (!reloading) {
     displaySegments(digits[ammoCount]);
   }
-  
+
   // display health
   displayHealth(health);
 
   // play sounds
   if (playingMelody) {
-    if (currentMillis - millisStartedTone >= melodyInterval) { // we are playing a melody, check if we finished playing current tone
-      if(currentToneIdx+1 == melodyLength){ // we finished playing a tone, check if we finished the melody
+    if (currentMillis - millisStartedTone >= melodyInterval) {  // we are playing a melody, check if we finished playing current tone
+      if (currentToneIdx + 1 == melodyLength) {                 // we finished playing a tone, check if we finished the melody
         // end of melody
         noTone(buzzerPin);
         playingMelody = false;
 
         // if dead play game over sound
-        if(!alive) {
+        if (!alive) {
           delay(100);
           playGameOverSound();
         }
-      } else { // we haven't finished the melody
+      } else {  // we haven't finished the melody
         // play next tone
         currentToneIdx++;
         millisStartedTone = currentMillis;
@@ -206,11 +245,11 @@ void loop()
     }
   } else if (playingShootSound) {
     if (currentMillis - millisStartedTone >= shootSoundInterval) {
-      if(currentToneIdx <= shootSoundEndTone) {
+      if (currentToneIdx <= shootSoundEndTone) {
         // end of melody
         noTone(buzzerPin);
         playingShootSound = false;
-        
+
       } else {
         // play next tone
         currentToneIdx -= 1;
@@ -222,12 +261,12 @@ void loop()
 
   // play reload animation
   if (reloading) {
-    
-    if (currentMillis - millisStartedFrame >= animationInterval) { // we are playing reload animation, check if we finished playing current frame
+
+    if (currentMillis - millisStartedFrame >= animationInterval) {  // we are playing reload animation, check if we finished playing current frame
       // play next frame
       currentFrameIdx++;
       // cycle to start if reached end of animation
-      if (currentFrameIdx > animationLength-1) {
+      if (currentFrameIdx > animationLength - 1) {
         currentFrameIdx = 0;
       }
       millisStartedFrame = currentMillis;
@@ -238,16 +277,16 @@ void loop()
   // check if hit indicator LED has been off for enough time (only if still alive)
   if (hitIndicator && currentMillis - millisStartedHit >= hitIndicatorTime && alive) {
     hitIndicator = false;
-    digitalWrite(hitLedPin, HIGH); // turn LED back on
+    digitalWrite(hitLedPin, HIGH);  // turn LED back on
   }
 
   // input: reset
   if (digitalRead(resetPin) == LOW) {
-    if(resetting) { // check if we were already holding the reset button
-      if(currentMillis - startedResetting >= resetTime) { // check if we held the reset button for enough time
+    if (resetting) {                                        // check if we were already holding the reset button
+      if (currentMillis - startedResetting >= resetTime) {  // check if we held the reset button for enough time
         reset();
       }
-    } else { // start a new timer when we press it
+    } else {  // start a new timer when we press it
       startedResetting = currentMillis;
       resetting = true;
     }
@@ -256,25 +295,24 @@ void loop()
   }
 
   // stop here if dead
-  if(!alive) {
+  if (!alive) {
     return;
   }
-  
+
   // input: shoot
-  if (digitalRead(triggerPin) == LOW && ammoCount > 0 && !reloading && currentMillis - lastShot >= shootCooldown)
-  {
+  if (digitalRead(triggerPin) == LOW && ammoCount > 0 && !reloading && currentMillis - lastShot >= shootCooldown) {
     // SHOOT
-    IrSender.sendNEC(irSendHex, 32); // send IR
-    IrReceiver.restartAfterSend(); // restart IR receiver
-    
+    IrSender.sendNEC(irSendHex, 32);  // send IR
+    IrReceiver.restartAfterSend();    // restart IR receiver
+
     ammoCount--;
     lastShot = currentMillis;
-    
+
     // SHOOT SFX
     currentToneIdx = shootSoundStartTone;
     millisStartedTone = currentMillis;
     tone(buzzerPin, currentToneIdx);
-    if(playingMelody) {
+    if (playingMelody) {
       playingMelody = false;
     }
     playingShootSound = true;
@@ -284,13 +322,13 @@ void loop()
   if (digitalRead(reloadPin) == LOW && ammoCount < maxAmmo && !reloading) {
     reloading = true;
     startedReload = currentMillis;
-    
+
     // RELOAD ANIMATION
     currentFrameIdx = 0;
     millisStartedFrame = currentMillis;
     displaySegments(reloadAnimation[currentFrameIdx]);
   }
-  
+
   // reload gun
   if (reloading && currentMillis - startedReload >= reloadTime) {
     ammoCount = maxAmmo;
@@ -298,20 +336,20 @@ void loop()
   }
 
   // check if receiving IR signal (getting shot)
-  if(IrReceiver.decode()) {
-    IrReceiver.resume(); // resume to receive other values
-    health--; // lose hp
+  if (IrReceiver.decode()) {
+    IrReceiver.resume();  // resume to receive other values
+    health--;             // lose hp
 
     // hit indicator LED
     hitIndicator = true;
-    digitalWrite(hitLedPin, LOW); // turn LED off
+    digitalWrite(hitLedPin, LOW);  // turn LED off
     millisStartedHit = currentMillis;
-    
+
     // GETTING SHOT SFX
     currentToneIdx = 0;
     millisStartedTone = currentMillis;
     tone(buzzerPin, hitMelody[currentToneIdx]);
-    if(playingShootSound) {
+    if (playingShootSound) {
       playingShootSound = false;
     }
     playingMelody = true;
