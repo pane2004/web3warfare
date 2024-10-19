@@ -1,15 +1,15 @@
-const express = require("express");
+import express from 'express';
 const app = express();
-const port = 3000;
+const port = 3001;
 
-app.get("/api", (req, res) => {
+app.get('/api', (req, res) => {
   res.json({
     value1: 24.25,
     value2: 49.54,
-    value3: 1005.14,
+    value3: 1005.14
   });
 });
 
-app.listen(port, () => {
-  console.log(`Server is running on http://localhost:${port}`);
+app.listen(port, '0.0.0.0', () => {
+  console.log(`Server is running on http://0.0.0.0:${port}`);
 });
