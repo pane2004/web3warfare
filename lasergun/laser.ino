@@ -5,12 +5,16 @@
 #include <Arduino_JSON.h>
 
 // CONFIG: MODIFY VALUES TO FIT PLAY STYLE
-const int maxHealth = 10;          // maximum health points
-const int maxAmmo = 5;             // maximum ammunition count (max is 9)
-const int shootCooldown = 500;     // interval between each shot (in ms)
-const int reloadTime = 1600;       // time it takes to reload the gun (in ms)
+int maxHealth = 10;                // maximum health points
+int maxAmmo = 9;                   // 9 will be not connected to wifi indicator, max ammo will be 8
+int shootCooldown = 500;           // interval between each shot (in ms)
+int reloadTime = 1600;             // time it takes to reload the gun (in ms)
 const int resetTime = 500;         // time the reset button has to be pressed to reset (in ms)
 const int hitIndicatorTime = 200;  // time the hit indicator LED turns off when getting shot at (in ms)
+bool canRunGame = false;
+bool diedFlag = false;
+String battleContract;
+String userAddress;
 
 // pins
 byte triggerPin = 4;
@@ -138,61 +142,55 @@ void playGameOverSound() {
   }
 }
 
-// wifi connection 
-const char *ssid = "Alex the iPhone 2.0";
-const char *password = "ethglobalsf";
+// wifi connection
+const char* ssid = "Alex the iPhone 2.0";
+const char* password = "ethglobalsf";
 
-String get_wifi_status(int status)
-{
-  switch (status)
-  {
-  case WL_IDLE_STATUS:
-    return "WL_IDLE_STATUS";
-  case WL_SCAN_COMPLETED:
-    return "WL_SCAN_COMPLETED";
-  case WL_NO_SSID_AVAIL:
-    return "WL_NO_SSID_AVAIL";
-  case WL_CONNECT_FAILED:
-    return "WL_CONNECT_FAILED";
-  case WL_CONNECTION_LOST:
-    return "WL_CONNECTION_LOST";
-  case WL_CONNECTED:
-    return "WL_CONNECTED";
-  case WL_DISCONNECTED:
-    return "WL_DISCONNECTED";
+String get_wifi_status(int status) {
+  switch (status) {
+    case WL_IDLE_STATUS:
+      return "WL_IDLE_STATUS";
+    case WL_SCAN_COMPLETED:
+      return "WL_SCAN_COMPLETED";
+    case WL_NO_SSID_AVAIL:
+      return "WL_NO_SSID_AVAIL";
+    case WL_CONNECT_FAILED:
+      return "WL_CONNECT_FAILED";
+    case WL_CONNECTION_LOST:
+      return "WL_CONNECTION_LOST";
+    case WL_CONNECTED:
+      return "WL_CONNECTED";
+    case WL_DISCONNECTED:
+      return "WL_DISCONNECTED";
   }
 }
 
 // http connection
-const char* serverName = "http://172.20.10.2:3001/api";
+const char* serverName = "http://172.20.10.2:3001/init";
 
 unsigned long lastTime = 0;
 unsigned long timerDelay = 5000;
 
-String sensorReadings;
-float sensorReadingsArr[3];
-
 String httpGETRequest(const char* serverName) {
   WiFiClient client;
   HTTPClient http;
-    
+
   // Your Domain name with URL path or IP address with path
   http.begin(client, serverName);
-  
+
   // If you need Node-RED/server authentication, insert user and password below
   //http.setAuthorization("REPLACE_WITH_SERVER_USERNAME", "REPLACE_WITH_SERVER_PASSWORD");
-  
+
   // Send HTTP POST request
   int httpResponseCode = http.GET();
-  
-  String payload = "{}"; 
-  
-  if (httpResponseCode>0) {
+
+  String payload = "{}";
+
+  if (httpResponseCode > 0) {
     Serial.print("HTTP Response code: ");
     Serial.println(httpResponseCode);
     payload = http.getString();
-  }
-  else {
+  } else {
     Serial.print("Error code: ");
     Serial.println(httpResponseCode);
   }
@@ -200,6 +198,34 @@ String httpGETRequest(const char* serverName) {
   http.end();
 
   return payload;
+}
+
+void httpPOSTRequest(const char* serverName, String& userAddress, String& battleContract) {
+  WiFiClient client;
+  HTTPClient http;
+
+  // Your Domain name with URL path or IP address with path
+  http.begin(client, serverName);
+
+  // Specify the content type for the request
+  http.addHeader("Content-Type", "application/json");
+
+  // JSON payload
+  String postData = "{\"userAddress\":\"" + userAddress + "\",\"battleContract\":\"" + battleContract + "\"}";
+
+  // Send the POST request
+  int httpResponseCode = http.POST(postData);
+
+  if (httpResponseCode > 0) {
+    Serial.print("HTTP Response code: ");
+    Serial.println(httpResponseCode);
+  } else {
+    Serial.print("Error code: ");
+    Serial.println(httpResponseCode);
+  }
+
+  // Free resources
+  http.end();
 }
 
 void setup() {
@@ -254,6 +280,25 @@ void setup() {
 
 void loop() {
   unsigned long currentMillis = millis();
+  // start by making init call
+  if (!canRunGame && WiFi.status() == WL_CONNECTED) {
+    String initialization;
+    initialization = httpGETRequest(serverName);
+    JSONVar init = JSON.parse(initialization);
+
+    maxHealth = int(init["maxHealth"]);
+    maxAmmo = int(init["maxAmmo"]);
+    ammoCount = maxAmmo;
+    shootCooldown = int(init["shootCooldown"]);
+    reloadTime = int(init["reloadTime"]);
+    battleContract = String(init["battleContract"]);
+    userAddress = String(init["userAddress"]);
+    bool play = bool(init["play"]);
+    if (play) {
+      canRunGame = true;
+      diedFlag = false;
+    }
+  }
   alive = health > 0;
 
   // display ammo count
@@ -337,11 +382,16 @@ void loop() {
 
   // stop here if dead
   if (!alive) {
+    if (!diedFlag) {
+      httpPOSTRequest("http://172.20.10.2:3001/died", userAddress, battleContract);
+      diedFlag = true;
+      canRunGame = false;
+    }
     return;
   }
 
   // input: shoot
-  if (digitalRead(triggerPin) == LOW && ammoCount > 0 && !reloading && currentMillis - lastShot >= shootCooldown) {
+  if (digitalRead(triggerPin) == LOW && ammoCount > 0 && !reloading && currentMillis - lastShot >= shootCooldown && canRunGame) {
     // SHOOT
     IrSender.sendNEC(irSendHex, 32);  // send IR
     IrReceiver.restartAfterSend();    // restart IR receiver
@@ -394,47 +444,5 @@ void loop() {
       playingShootSound = false;
     }
     playingMelody = true;
-  }
-
-  // http request
-  //Send an HTTP POST request every 10 minutes
-  if ((millis() - lastTime) > timerDelay) {
-    //Check WiFi connection status
-    if(WiFi.status()== WL_CONNECTED){
-              
-      sensorReadings = httpGETRequest(serverName);
-      Serial.println(sensorReadings);
-      JSONVar myObject = JSON.parse(sensorReadings);
-  
-      // JSON.typeof(jsonVar) can be used to get the type of the var
-      if (JSON.typeof(myObject) == "undefined") {
-        Serial.println("Parsing input failed!");
-        return;
-      }
-    
-      Serial.print("JSON object = ");
-      Serial.println(myObject);
-    
-      // myObject.keys() can be used to get an array of all the keys in the object
-      JSONVar keys = myObject.keys();
-    
-      for (int i = 0; i < keys.length(); i++) {
-        JSONVar value = myObject[keys[i]];
-        Serial.print(keys[i]);
-        Serial.print(" = ");
-        Serial.println(value);
-        sensorReadingsArr[i] = double(value);
-      }
-      Serial.print("1 = ");
-      Serial.println(sensorReadingsArr[0]);
-      Serial.print("2 = ");
-      Serial.println(sensorReadingsArr[1]);
-      Serial.print("3 = ");
-      Serial.println(sensorReadingsArr[2]);
-    }
-    else {
-      Serial.println("WiFi Disconnected");
-    }
-    lastTime = millis();
   }
 }
