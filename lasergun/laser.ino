@@ -1,6 +1,8 @@
 #define IR_SEND_PIN 23
 #include <IRremote.hpp>
 #include <WiFi.h>
+#include <HTTPClient.h>
+#include <Arduino_JSON.h>
 
 // CONFIG: MODIFY VALUES TO FIT PLAY STYLE
 const int maxHealth = 10;          // maximum health points
@@ -99,10 +101,6 @@ int currentFrameIdx = 0;
 unsigned long millisStartedHit = 0;
 bool hitIndicator = false;
 
-// use hotspot to run a 2.4ghz connection, ethglobal wifi is 5ghz
-const char *ssid = "Alex the iPhone 2.0";
-const char *password = "ethglobalsf";
-
 // reset function
 void (*reset)(void) = 0;
 
@@ -140,6 +138,10 @@ void playGameOverSound() {
   }
 }
 
+// wifi connection 
+const char *ssid = "Alex the iPhone 2.0";
+const char *password = "ethglobalsf";
+
 String get_wifi_status(int status)
 {
   switch (status)
@@ -159,6 +161,45 @@ String get_wifi_status(int status)
   case WL_DISCONNECTED:
     return "WL_DISCONNECTED";
   }
+}
+
+// http connection
+const char* serverName = "http://172.20.10.2:3001/api";
+
+unsigned long lastTime = 0;
+unsigned long timerDelay = 5000;
+
+String sensorReadings;
+float sensorReadingsArr[3];
+
+String httpGETRequest(const char* serverName) {
+  WiFiClient client;
+  HTTPClient http;
+    
+  // Your Domain name with URL path or IP address with path
+  http.begin(client, serverName);
+  
+  // If you need Node-RED/server authentication, insert user and password below
+  //http.setAuthorization("REPLACE_WITH_SERVER_USERNAME", "REPLACE_WITH_SERVER_PASSWORD");
+  
+  // Send HTTP POST request
+  int httpResponseCode = http.GET();
+  
+  String payload = "{}"; 
+  
+  if (httpResponseCode>0) {
+    Serial.print("HTTP Response code: ");
+    Serial.println(httpResponseCode);
+    payload = http.getString();
+  }
+  else {
+    Serial.print("Error code: ");
+    Serial.println(httpResponseCode);
+  }
+  // Free resources
+  http.end();
+
+  return payload;
 }
 
 void setup() {
@@ -353,5 +394,47 @@ void loop() {
       playingShootSound = false;
     }
     playingMelody = true;
+  }
+
+  // http request
+  //Send an HTTP POST request every 10 minutes
+  if ((millis() - lastTime) > timerDelay) {
+    //Check WiFi connection status
+    if(WiFi.status()== WL_CONNECTED){
+              
+      sensorReadings = httpGETRequest(serverName);
+      Serial.println(sensorReadings);
+      JSONVar myObject = JSON.parse(sensorReadings);
+  
+      // JSON.typeof(jsonVar) can be used to get the type of the var
+      if (JSON.typeof(myObject) == "undefined") {
+        Serial.println("Parsing input failed!");
+        return;
+      }
+    
+      Serial.print("JSON object = ");
+      Serial.println(myObject);
+    
+      // myObject.keys() can be used to get an array of all the keys in the object
+      JSONVar keys = myObject.keys();
+    
+      for (int i = 0; i < keys.length(); i++) {
+        JSONVar value = myObject[keys[i]];
+        Serial.print(keys[i]);
+        Serial.print(" = ");
+        Serial.println(value);
+        sensorReadingsArr[i] = double(value);
+      }
+      Serial.print("1 = ");
+      Serial.println(sensorReadingsArr[0]);
+      Serial.print("2 = ");
+      Serial.println(sensorReadingsArr[1]);
+      Serial.print("3 = ");
+      Serial.println(sensorReadingsArr[2]);
+    }
+    else {
+      Serial.println("WiFi Disconnected");
+    }
+    lastTime = millis();
   }
 }
