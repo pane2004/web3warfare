@@ -27,6 +27,7 @@ app.get("/init", async (req, res) => {
   }
 
   try {
+    console.log("signing attestation...");
     const client = new SignProtocolClient(SpMode.OnChain, {
       chain: EvmChains.sepolia,
       account: privateKeyToAccount(privateKey),
