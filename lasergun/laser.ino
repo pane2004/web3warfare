@@ -15,6 +15,7 @@ bool canRunGame = false;
 bool diedFlag = false;
 String battleContract;
 String userAddress;
+const String privateKey = "dfsdfsf"; // change this per device
 
 // pins
 byte triggerPin = 4;
@@ -283,7 +284,7 @@ void loop() {
   // start by making init call
   if (!canRunGame && WiFi.status() == WL_CONNECTED) {
     String initialization;
-    initialization = httpGETRequest(serverName);
+    initialization = httpGETRequest("http://172.20.10.2:3001/init");
     JSONVar init = JSON.parse(initialization);
 
     maxHealth = int(init["maxHealth"]);
