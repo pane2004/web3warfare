@@ -8,6 +8,12 @@ import { useDynamicContext } from "@dynamic-labs/sdk-react-core";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import {
+  SignProtocolClient,
+  SpMode,
+  EvmChains,
+  privateKeyToAccount,
+} from "@ethsign/sp-sdk";
 
 const bountyDuelABI = [
   {
@@ -308,11 +314,34 @@ export default function BattlePage() {
         })) as BattleEvent[];
 
         setEvents(formattedEvents);
+
+        // Use SDK to fetch attestation data based on the wallet addresses involved
+        const client = new SignProtocolClient(SpMode.OnChain, {
+          chain: EvmChains.sepolia,
+        });
+
+        const challengerAttestations = await client.queryAttestationList({
+          schemaId: "schemaId_here",
+          attester: formattedEvents.find((e) => e.type === "DuelStarted")?.data
+            .challenger,
+          page: 1,
+        });
+
+        const targetAttestations = await client.queryAttestationList({
+          schemaId: "schemaId_here",
+          attester: formattedEvents.find((e) => e.type === "DuelStarted")?.data
+            .target,
+          page: 1,
+        });
+
+        console.log("Challenger Attestations:", challengerAttestations);
+        console.log("Target Attestations:", targetAttestations);
       } catch (error) {
-        console.error("Error fetching events:", error);
+        console.error("Error fetching events or attestations:", error);
         toast({
           title: "Error",
-          description: "Failed to fetch battle events. Please try again.",
+          description:
+            "Failed to fetch battle events and attestations. Please try again.",
           variant: "destructive",
         });
       } finally {
@@ -334,8 +363,7 @@ export default function BattlePage() {
     }
 
     try {
-      // Refetch events
-      // This is a simplified approach. In a real app, you might want to use websockets or polling for real-time updates.
+      // Refetch events (simplified approach)
       const newEvents = await publicClient.getLogs({
         address: contractAddress,
         events: [
