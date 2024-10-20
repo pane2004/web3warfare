@@ -1,29 +1,66 @@
 import express from "express";
+import {
+  SignProtocolClient,
+  SpMode,
+  EvmChains,
+  delegateSignAttestation,
+  delegateSignRevokeAttestation,
+  delegateSignSchema,
+} from "@ethsign/sp-sdk";
+import { privateKeyToAccount } from "viem/accounts";
+
 const app = express();
-const port = 3001;
+const port = 3002;
 let liveGame = false;
 
 // Middleware to parse JSON requests
 app.use(express.json());
 
-app.get("/init", (req, res) => {
-  // Default beginner health values
-  let maxHealth = 5;
-  let maxAmmo = 3;
-  let shootCooldown = 500; // ms
-  let reloadTime = 2000; // ms
-  let userAddress = "696969696";
-  let battleContract = "sfspdfjpsdif";
+app.get("/init", async (req, res) => {
+  // Extract privateKey and blasterId from the query parameters
+  const { privateKey, blasterId } = req.query;
 
-  res.json({
-    maxHealth: maxHealth,
-    maxAmmo: maxAmmo,
-    shootCooldown: shootCooldown,
-    reloadTime: reloadTime,
-    userAddress: userAddress,
-    battleContract: battleContract,
-    play: true,
-  });
+  if (!privateKey || !blasterId) {
+    return res
+      .status(400)
+      .json({ error: "Private key and blasterId are required" });
+  }
+
+  try {
+    const client = new SignProtocolClient(SpMode.OnChain, {
+      chain: EvmChains.sepolia,
+      account: privateKeyToAccount(privateKey),
+    });
+
+    const createAttestRes = await client.createAttestation({
+      schemaId: "0x2a7",
+      data: {
+        signer: privateKeyToAccount(privateKey).address
+      },
+    });
+
+    console.log("https://sepolia.etherscan.io/tx/" + createAttestRes.txHash);
+
+    let maxHealth = 5;
+    let maxAmmo = 3;
+    let shootCooldown = 500; // ms
+    let reloadTime = 2000; // ms
+    let userAddress = "696969696";
+    let battleContract = "sfspdfjpsdif";
+
+    res.json({
+      maxHealth: maxHealth,
+      maxAmmo: maxAmmo,
+      shootCooldown: shootCooldown,
+      reloadTime: reloadTime,
+      userAddress: userAddress,
+      battleContract: battleContract,
+      play: true,
+    });
+  } catch (error) {
+    console.error("Error creating attestation:", error);
+    res.status(500).json({ error: "Failed to create attestation" });
+  }
 });
 
 app.post("/died", (req, res) => {

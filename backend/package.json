@@ -12,6 +12,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@ethsign/sp-sdk": "^0.7.5",
     "express": "^4.21.1"
   }
 }
