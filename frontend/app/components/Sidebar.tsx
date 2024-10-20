@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { DynamicWidget } from "@/lib/dynamic";
-import { Inbox, ShoppingBag, User } from "lucide-react";
+import { Inbox, ShoppingBag, User, UserCircle } from "lucide-react";
 
 const tabs = [
   { id: "events", label: "Events", icon: Inbox, href: "/events" },
+  { id: "bounties", label: "Bounty Board", icon: UserCircle, href: "/bountyboard" },
   {
     id: "marketplace",
     label: "Marketplace",
@@ -22,7 +23,7 @@ export default function Sidebar() {
   return (
     <div className="w-64 bg-gray-900 text-white flex flex-col">
       <div className="p-4">
-        <h1 className="text-2xl font-bold">My App</h1>
+        <h1 className="text-2xl font-bold">Web3Warfare</h1>
       </div>
       <nav className="flex-1">
         <ul>

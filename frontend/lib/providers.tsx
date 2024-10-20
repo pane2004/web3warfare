@@ -46,6 +46,7 @@ export default function Providers({ children }: { children: React.ReactNode }) {
       settings={{
         environmentId: "03678269-874d-4eee-a385-80bf7decd36b",
         walletConnectors: [EthereumWalletConnectors],
+        overrides: { evmNetworks },
       }}
     >
       {children}
